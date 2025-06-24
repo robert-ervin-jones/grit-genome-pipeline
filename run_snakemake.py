@@ -38,14 +38,6 @@ def run_snakemake(length_filter=False):
     smk_cmd = ' '.join(smk_frags)
     subprocess.run(smk_cmd, shell=True, executable='/bin/bash', check=True)
 
-def run_mfannot():
-    for root, dirs, files in os.walk(".", topdown=False):
-        for name in files:
-            #print(os.path.join(root, name))
-            cmd = 'singularity exec -B $PWD:$PWD ~/software/sifs/mfannot.sif mfannot '
-
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
                     prog='ProgramName',
@@ -56,12 +48,11 @@ if __name__ == '__main__':
     parser.add_argument('--q_filter', metavar='N', type=str, default=20, help='Q score filter value. Default: 20')
     parser.add_argument('--lengths', metavar='N', type=str, default=5000, help='Length filter value. Default: 5000')
     # TODO: Add option set flye to use nano-raw
-    parser.add_argument('--gc_filter', type=str, default=None, help='Range to GC filter')
     parser.add_argument('-n', '--dry_run', action='store_true', default=False)
 
     # Changes help descriptions from the default input and output help descriptions
     args = parser.parse_args()
     
-    if not args.gc_filter:
-        run_snakemake()
-        run_mfannot()
+    
+    run_snakemake()
+    run_mfannot()
