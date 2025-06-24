@@ -1,6 +1,6 @@
 # Genome Assembly and Annotation Pipeline
 
-This repository contains a Snakemake-based workflow for long-read genome assembly, annotation, and quality assessment. It is designed for Oxford Nanopore data and supports both eukaryotic and prokaryotic genome analysis.
+This repository contains a Snakemake-based workflow for long-read genome assembly, annotation, and quality assessment. It is designed for Oxford Nanopore data.
 
 ## Features
 - Read cleaning and filtering
