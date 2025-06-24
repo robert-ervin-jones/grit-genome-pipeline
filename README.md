@@ -28,13 +28,22 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
    git clone <repo-url>
    cd genome-pipeline
    ```
+4. **Setup environment for resource downloads:**
+   ```sh
+   mamba create -n bakta bakta=1.11.0
+   mamba create -n eggnog eggnog-mapper=2.1.13
+   ```
 3. **Download resources:**
    ```sh
+   conda activate bakta
    bakta_db download --output resources/bakta-light --type light
+   conda deactivate
    git clone https://github.com/nextgenusfs/augustus.git
    cp -r augustus/config resources/augustus_config
    rm -rf augustus
+   conda activate eggnog
    download_eggnog_data.py --data_dir resources/eggnog_dbs
+   conda deactivate
    ```
 4. **Add your FASTQ files to `data/`**
     - Place your raw FASTQ files in the `data/` directory. The files should be named as `{sample}.fastq.gz`.
