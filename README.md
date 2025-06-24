@@ -28,12 +28,17 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
    git clone <repo-url>
    cd genome-pipeline
    ```
+3. **If this is a fresh mamba installation, add bioconda to `.condarc`:**
+   ```sh
+   conda config --add channels bioconda
+   conda config --add channels conda-forge
+   ```
 4. **Setup environment for resource downloads:**
    ```sh
    mamba create -n bakta bakta=1.11.0
    mamba create -n eggnog eggnog-mapper=2.1.13
    ```
-3. **Download resources:**
+5. **Download resources:**
    ```sh
    conda activate bakta
    bakta_db download --output resources/bakta-light --type light
@@ -45,13 +50,13 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
    download_eggnog_data.py --data_dir resources/eggnog_dbs
    conda deactivate
    ```
-4. **Add your FASTQ files to `data/`**
+6. **Add your FASTQ files to `data/`**
     - Place your raw FASTQ files in the `data/` directory. The files should be named as `{sample}.fastq.gz`.
-5. **Make conda environment:**
+7. **Make conda environment:**
    ```sh
    mamba create -n snakemake snakemake=9.6.0 biopython=1.85 r=4.4 r-ggplot2=3.5.2 r-ggpubr=0.6.0
    ```
-5. **Run the workflow using the wrapper script:**
+8. **Run the workflow using the wrapper script:**
    ```sh
    conda activate snakemake
    python run_snakemake.py --threads 8 --q_filter <N> --lengths <N>
