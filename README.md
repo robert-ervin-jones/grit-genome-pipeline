@@ -28,7 +28,7 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
    git clone <repo-url>
    cd genome-pipeline
    ```
-4. **Setup environment for resource downloads:**
+4. **Setup environments for resource downloads:**
    ```sh
    mamba create -n bakta bakta=1.11.0
    mamba create -n eggnog eggnog-mapper=2.1.13
