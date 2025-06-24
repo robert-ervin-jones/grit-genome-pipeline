@@ -1,0 +1,375 @@
+import os
+q_scores = str(config['qscores']).split(',')
+lengths = str(config['lengths']).split(',')
+aug_config = os.path.join(str(config['wrapper_dir']), 'resources/augustus_config')
+busco_downloads = os.path.join(str(config['wrapper_dir']), 'resources/busco_downloads')
+samples = [file.split('.')[0] for file in os.listdir('data') if file.endswith('fastq.gz')]
+
+
+rule all:
+    input:
+        expand('results/final/{sample}/assembly.fasta', sample=samples),
+        
+
+
+rule clean_fastq:
+    input:
+        'data/{sample}.fastq.gz'
+    output:
+        'results/clean_fastq/{sample}.fastq.gz'
+    log:
+        'results/logs/clean_fastq/{sample}.log'
+    params:
+        contam='resources/contaminants.fasta'
+    threads:
+        workflow.cores
+    conda:
+        'envs/clean_fastq.yaml'
+    shell:
+        'minimap2 -t {threads} -ax map-ont {params.contam} {input} 2> {log} | samtools fastq -n -f 4 - 2>> {log} | gzip > {output} 2>> {log}'
+
+rule metachopper:
+    input:
+        'results/clean_fastq/{sample}.fastq.gz'
+    output:
+        'results/metachopper/{sample}.fastq.gz'
+    log:
+        'results/logs/metachopper/{sample}.log'
+    params:
+        length = 5000,
+        quality = 20
+    threads:
+        workflow.cores
+    conda:
+        'envs/chopper.yaml'
+    shell:
+        'gunzip -c {input} 2> {log} | chopper -l {params.length} -q {params.quality} --threads {threads} 2>> {log} | gzip > {output} 2>> {log}'
+
+rule metaflye:
+    input:
+        'results/metachopper/{sample}.fastq.gz'
+    output:
+        'results/metaflye/{sample}/assembly.fasta',
+        'results/metaflye/{sample}/assembly_graph.gfa',
+        'results/metaflye/{sample}/assembly_graph.gv',
+        'results/metaflye/{sample}/assembly_info.txt',
+    log:
+        'results/logs/metaflye/{sample}.log'
+    params:
+        out_dir='results/metaflye/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/flye.yaml'
+    shell:
+        '''
+        flye \
+            --meta \
+            --nano-hq {input} \
+            --out-dir {params.out_dir} \
+            --threads {threads} &> {log}
+        '''
+
+rule metawhokaryote:
+    input:
+        'results/metaflye/{sample}/assembly.fasta'
+    output:
+        'results/metawhokaryote/{sample}/eukaryotes.fasta',
+        'results/metawhokaryote/{sample}/prokaryotes.fasta',
+        'results/metawhokaryote/{sample}/whokaryote_predictions_T.tsv',
+    log:
+        'results/logs/metawhokaryote/{sample}.log'
+    threads:
+        workflow.cores
+    params:
+        out_dir='results/metawhokaryote/{sample}',
+    conda:
+        'envs/whokaryote.yaml'
+    shell:
+        'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
+
+rule metabraker:
+    input:
+        'results/metawhokaryote/{sample}/eukaryotes.fasta',
+    output:
+        'results/metabraker/{sample}/braker.aa'
+    log:
+        'results/logs/metabraker/{sample}.log'
+    params:
+        out_dir='results/metabraker/{sample}',
+        config_dir=aug_config,
+    threads:
+        workflow.cores
+    container:
+        'docker://teambraker/braker3:v3.0.7.6'
+    shell:
+        '''
+        braker.pl \
+            --genome {input} \
+            --esmode \
+            --threads {threads} \
+            --AUGUSTUS_CONFIG_PATH {params.config_dir} \
+            --workingdir {params.out_dir} &> {log}
+        '''
+
+rule metabusco:
+    input:
+        'results/metabraker/{sample}/braker.aa'
+    output:
+        'results/metabusco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt'
+    log:
+        'results/logs/metabusco/{sample}.log'
+    params:
+        out_dir='results/metabusco/{sample}',
+        lineage=os.path.join(busco_downloads, 'lineages/eukaryota_odb10'),
+    threads:
+        workflow.cores
+    container:
+        'docker://ezlabgva/busco:v5.8.2_cv1'
+    shell:
+        '''
+        busco \
+            -i {input} \
+            -o {params.out_dir} \
+            -m prot \
+            -l {params.lineage} \
+            --offline \
+            -q \
+            -f &> {log}
+        rm -r busco_downloads
+        '''
+
+rule metabakta:
+    input:
+        'results/metawhokaryote/{sample}/prokaryotes.fasta'
+    output:
+        'results/metabakta/{sample}/prokaryotes.gff3'
+    log:
+        'results/logs/metabakta/{sample}.log'
+    params:
+        out_dir='results/metabakta/{sample}',
+        db=os.path.join(str(config['wrapper_dir']), 'resources/bakta-light'),
+    conda:
+        'envs/bakta.yaml'
+    shell:
+        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
+
+
+rule cleaner_fastq:
+    input:
+        'results/metawhokaryote/{sample}/eukaryotes.fasta',
+        'results/clean_fastq/{sample}.fastq.gz'
+    output:
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    log:
+        'results/logs/cleaner_fastq/{sample}.log'
+    threads:
+        workflow.cores
+    conda:
+        'envs/clean_fastq.yaml'
+    shell:
+        '''
+        minimap2 -t {threads} -ax map-ont {input[0]} {input[1]} 2> {log} | \
+        samtools fastq -n -f 4 - | gzip > {output} 2>> {log}
+        '''
+
+rule chopper:
+    input:
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    output:
+        'results/chopper/{sample}.fastq.gz'
+    log:
+        'results/logs/chopper/{sample}.log'
+    params:
+        length = 5000,
+        quality = 15
+    threads:
+        workflow.cores
+    conda:
+        'envs/chopper.yaml'
+    shell:
+        'gunzip -c {input} 2> {log} | chopper -l {params.length} -q {params.quality} --threads {threads} 2>> {log} | gzip > {output} 2>> {log}'
+
+rule flye:
+    input:
+        'results/chopper/{sample}.fastq.gz'
+    output:
+        'results/flye/{sample}/assembly.fasta',
+        'results/flye/{sample}/assembly_graph.gfa',
+        'results/flye/{sample}/assembly_graph.gv',
+        'results/flye/{sample}/assembly_info.txt',
+    log:
+        'results/logs/flye/{sample}.log'
+    params:
+        out_dir='results/flye/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/flye.yaml'
+    shell:
+        '''
+        flye \
+            --nano-hq {input} \
+            --out-dir {params.out_dir} \
+            --threads {threads} &> {log}
+        '''
+
+rule whokaryote:
+    input:
+        'results/flye/{sample}/assembly.fasta'
+    output:
+        'results/whokaryote/{sample}/eukaryotes.fasta',
+        'results/whokaryote/{sample}/prokaryotes.fasta',
+        'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
+    log:
+        'results/logs/whokaryote/{sample}.log'
+    threads:
+        workflow.cores
+    params:
+        out_dir='results/whokaryote/{sample}',
+    conda:
+        'envs/whokaryote.yaml'
+    shell:
+        'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
+
+rule braker:
+    input:
+        'results/whokaryote/{sample}/eukaryotes.fasta',
+    output:
+        'results/braker/{sample}/braker.aa'
+    log:
+        'results/logs/braker/{sample}.log'
+    params:
+        out_dir='results/braker/{sample}',
+        config_dir=aug_config,
+    threads:
+        workflow.cores
+    container:
+        'docker://teambraker/braker3:v3.0.7.6'
+    shell:
+        '''
+        braker.pl \
+            --genome {input} \
+            --esmode \
+            --threads {threads} \
+            --AUGUSTUS_CONFIG_PATH {params.config_dir} \
+            --workingdir {params.out_dir} &> {log}
+        '''
+
+rule busco:
+    input:
+        'results/braker/{sample}/braker.aa'
+    output:
+        'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt'
+    log:
+        'results/logs/busco/{sample}.log'
+    params:
+        out_dir='results/busco/{sample}',
+        lineage=os.path.join(busco_downloads, 'lineages/eukaryota_odb10'),
+    threads:
+        workflow.cores
+    container:
+        'docker://ezlabgva/busco:v5.8.2_cv1'
+    shell:
+        '''
+        busco \
+            -i {input} \
+            -o {params.out_dir} \
+            -m prot \
+            -l {params.lineage} \
+            --offline \
+            -q \
+            -f &> {log}
+        rm -r busco_downloads
+        '''
+
+rule bakta:
+    input:
+        'results/whokaryote/{sample}/prokaryotes.fasta'
+    output:
+        'results/bakta/{sample}/prokaryotes.gff3'
+    log:
+        'results/logs/bakta/{sample}.log'
+    params:
+        out_dir='results/bakta/{sample}',
+        db=os.path.join(str(config['wrapper_dir']), 'resources/bakta-light'),
+    conda:
+        'envs/bakta.yaml'
+    shell:
+        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
+
+rule gc_content:
+    input:
+        'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
+        'results/flye/{sample}/assembly.fasta'
+    output:
+        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+    log:
+        'results/logs/gc_content/{sample}.log'
+    script:
+        'scripts/post_who_gc_content.py'
+
+
+rule plot_gc:
+    input:
+        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+    output:
+        'results/gc_content/{sample}/gc_plot.png'
+    log:
+        'results/logs/gc_content/{sample}_plot.log'
+    script:
+        'scripts/dot_plot.R'
+
+
+rule eggnog:
+    input:
+        'results/braker/{sample}/braker.aa'
+    output:
+        'results/eggnog/{sample}/eukaryotes.emapper.annotations'
+    log:
+        'results/logs/eggnog/{sample}.log'
+    params:
+        out_dir='results/eggnog/{sample}',
+        db_dir=os.path.join(str(config['wrapper_dir']), 'resources/eggnog_dbs')
+    threads:
+        workflow.cores
+    conda:
+        'envs/eggnog.yaml'
+    shell:
+        '''
+        emapper.py --override -i {input} -o eukaryotes --output_dir {params.out_dir} --cpu {threads} --data_dir {params.db_dir} &> {log}
+        mv {params.out_dir}/eukaryotes.emapper.annotations {output}
+        '''
+
+
+rule cp_final_output:
+    input:
+        'results/flye/{sample}/assembly_graph.gfa',
+        'results/flye/{sample}/assembly.fasta',
+        'results/braker/{sample}/braker.aa',
+        'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
+        'results/bakta/{sample}/prokaryotes.gff3',
+        'results/gc_content/{sample}/gc_plot.png',
+        'results/eggnog/{sample}/eukaryotes.emapper.annotations'
+    output:
+        'results/final/{sample}/assembly_graph.gfa',
+        'results/final/{sample}/assembly.fasta',
+        'results/final/{sample}/braker.aa',
+        'results/final/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
+        'results/final/{sample}/prokaryotes.gff3',
+        'results/final/{sample}/gc_plot.png',
+        'results/final/{sample}/eukaryotes.emapper.annotations'
+    log:
+        'results/logs/final/{sample}.log'
+    threads:
+        1
+    shell:
+        '''
+        cp {input[0]} {output[0]} &> {log}
+        cp {input[1]} {output[1]} &>> {log}
+        cp {input[2]} {output[2]} &>> {log}
+        cp {input[3]} {output[3]} &>> {log}
+        cp {input[4]} {output[4]} &>> {log}
+        cp {input[5]} {output[5]} &>> {log}
+        cp {input[6]} {output[6]} &>> {log}
+        '''
