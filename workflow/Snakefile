@@ -157,7 +157,7 @@ rule metabakta:
 
 rule cleaner_fastq:
     input:
-        'results/metawhokaryote/{sample}/eukaryotes.fasta',
+        'results/metawhokaryote/{sample}/prokaryotes.fasta',
         'results/clean_fastq/{sample}.fastq.gz'
     output:
         'results/cleaner_fastq/{sample}.fastq.gz'
