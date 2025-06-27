@@ -1,7 +1,6 @@
 data/
 .snakemake/
 results/
-resources/augustus_config/
 resources/busco_downloads/
 resources/bakta-light/
 resources/eggnog_dbs/
