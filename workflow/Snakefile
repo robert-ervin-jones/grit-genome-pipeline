@@ -101,7 +101,7 @@ rule metabraker:
     threads:
         workflow.cores
     container:
-        'docker://teambraker/braker3:v3.0.7.6'
+        'docker://teambraker/braker3:latest'
     shell:
         '''
         braker.pl \
