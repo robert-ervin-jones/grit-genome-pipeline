@@ -1,6 +1,5 @@
 data/
 .snakemake/
 results/
-resources/busco_downloads/
 resources/bakta-light/
 resources/eggnog_dbs/
