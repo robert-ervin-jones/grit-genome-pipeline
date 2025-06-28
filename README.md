@@ -41,10 +41,10 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
 5. **Download resources:**
    ```sh
    conda activate bakta
-   bakta_db download --output resources/bakta-light --type light
+   bakta_db download --output resources --type light
    conda deactivate
    conda activate eggnog
-   download_eggnog_data.py --data_dir resources/eggnog_dbs
+   download_eggnog_data.py --data_dir resources
    conda deactivate
    ```
 6. **Add your FASTQ files to `data/`**
