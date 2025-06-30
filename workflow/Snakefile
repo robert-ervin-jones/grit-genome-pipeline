@@ -353,7 +353,6 @@ rule eggnog:
     shell:
         '''
         emapper.py --override -i {input} -o eukaryotes --output_dir {params.out_dir} --cpu {threads} --data_dir {params.db_dir} &> {log}
-        mv {params.out_dir}/eukaryotes.emapper.annotations {output}
         '''
 
 
