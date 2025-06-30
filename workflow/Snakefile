@@ -152,7 +152,7 @@ rule metabakta:
         'results/logs/metabakta/{sample}.log'
     params:
         out_dir='results/metabakta/{sample}',
-        db=os.path.join(str(config['wrapper_dir']), 'resources/bakta-light'),
+        db=os.path.join(str(config['wrapper_dir']), 'resources/db-light'),
     conda:
         'envs/bakta.yaml'
     shell:
@@ -306,7 +306,7 @@ rule bakta:
         'results/logs/bakta/{sample}.log'
     params:
         out_dir='results/bakta/{sample}',
-        db=os.path.join(str(config['wrapper_dir']), 'resources/bakta-light'),
+        db=os.path.join(str(config['wrapper_dir']), 'resources/db-light'),
     conda:
         'envs/bakta.yaml'
     shell:
