@@ -272,7 +272,8 @@ rule braker:
 
 rule busco:
     input:
-        'results/braker/{sample}/braker.aa'
+        'results/braker/{sample}/braker.aa',
+        'results/braker/{sample}/braker.gtf'
     output:
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt'
     log:
@@ -329,7 +330,7 @@ rule plot_gc:
         'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv',
         'results/meta_gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
     output:
-        'results/gc_content/{sample}/gc_plot.png'
+        'results/gc_content/{sample}/gc_plot.pdf'
     log:
         'results/logs/gc_content/{sample}_plot.log'
     script:
@@ -338,7 +339,8 @@ rule plot_gc:
 
 rule eggnog:
     input:
-        'results/braker/{sample}/braker.aa'
+        'results/braker/{sample}/braker.aa',
+        'results/braker/{sample}/braker.gtf'
     output:
         'results/eggnog/{sample}/eukaryotes.emapper.annotations'
     log:
@@ -352,7 +354,14 @@ rule eggnog:
         'envs/eggnog.yaml'
     shell:
         '''
-        emapper.py --override -i {input} -o eukaryotes --output_dir {params.out_dir} --cpu {threads} --data_dir {params.db_dir} &> {log}
+        emapper.py \
+            --override \
+            -i {input[0]} \
+            -o eukaryotes \
+            --output_dir {params.out_dir} \
+            --cpu {threads} \
+            --data_dir {params.db_dir} \
+            --decorate_gff {input[1]} &> {log}
         '''
 
 
@@ -365,7 +374,7 @@ rule cp_final_output:
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/bakta/{sample}/prokaryotes.gff3',
         'results/metabakta/{sample}/prokaryotes.gff3',
-        'results/gc_content/{sample}/gc_plot.png',
+        'results/gc_content/{sample}/gc_plot.pdf',
         'results/eggnog/{sample}/eukaryotes.emapper.annotations'
     output:
         'results/final/{sample}/assembly_graph.gfa',
@@ -375,7 +384,7 @@ rule cp_final_output:
         'results/final/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/final/{sample}/prokaryotes.gff3',
         'results/final/{sample}/metaprokaryotes.gff3',
-        'results/final/{sample}/gc_plot.png',
+        'results/final/{sample}/gc_plot.pdf',
         'results/final/{sample}/eukaryotes.emapper.annotations'
     log:
         'results/logs/final/{sample}.log'

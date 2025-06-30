@@ -22,7 +22,7 @@ library(ggpubr)
 df <- read.table(input_file_1, sep = '\t', header = TRUE)
 
 # Create dot plot for contigs
-dp <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
+dp1 <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
     geom_dotplot(binaxis='y', stackdir='up',
         stackratio=0.025, dotsize=0.5) +
     theme_bw() +
@@ -37,7 +37,7 @@ dp <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
         fill = "Type")
 
 # Create histogram for overall GC distribution
-h <- ggplot(df, aes(x=gc_content)) +
+h1 <- ggplot(df, aes(x=gc_content)) +
     geom_histogram(binwidth=2, alpha=0.7, color="black", 
         fill="lightblue") +
     geom_density(alpha=0.3, fill="#FF6666") +
@@ -53,7 +53,7 @@ h <- ggplot(df, aes(x=gc_content)) +
 df <- read.table(input_file_2, sep = '\t', header = TRUE)
 
 # Create dot plot for contigs
-dp <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
+dp2 <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
     geom_dotplot(binaxis='y', stackdir='up',
         stackratio=0.025, dotsize=0.5) +
     theme_bw() +
@@ -68,7 +68,7 @@ dp <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
         fill = "Type")
 
 # Create histogram for overall GC distribution
-h <- ggplot(df, aes(x=gc_content)) +
+h2 <- ggplot(df, aes(x=gc_content)) +
     geom_histogram(binwidth=2, alpha=0.7, color="black", 
         fill="lightblue") +
     geom_density(alpha=0.3, fill="#FF6666") +
@@ -81,7 +81,7 @@ h <- ggplot(df, aes(x=gc_content)) +
         y = "Frequency")
 
 # Combine plots
-combined_plot <- ggarrange(h, dp, ncol = 2, nrow = 2)
+combined_plot <- ggarrange(h1, dp2, h2, dp2, ncol = 2, nrow = 2)
 
 # Save the plot
 ggsave(output_file, plot = combined_plot, width = 10, height = 8, dpi = 300)
