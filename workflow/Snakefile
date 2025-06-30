@@ -272,8 +272,7 @@ rule braker:
 
 rule busco:
     input:
-        'results/braker/{sample}/braker.aa',
-        'results/braker/{sample}/braker.gtf'
+        'results/braker/{sample}/braker.aa'
     output:
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt'
     log:
@@ -362,6 +361,7 @@ rule eggnog:
             --cpu {threads} \
             --data_dir {params.db_dir} \
             --decorate_gff {input[1]} &> {log}
+        rm -r emappertmp*
         '''
 
 
