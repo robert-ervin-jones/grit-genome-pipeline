@@ -361,7 +361,6 @@ rule eggnog:
             --cpu {threads} \
             --data_dir {params.db_dir} \
             --decorate_gff {input[1]} &> {log}
-        rm -r emappertmp*
         '''
 
 
