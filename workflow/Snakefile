@@ -107,7 +107,7 @@ rule metarepeatmodeler:
     shell:
         '''
         BuildDatabase -name {params.db_name} {input} &> {log}
-        RepeatModeler -database {params.db_name} -threads {threads} &>> {log}
+        RepeatModeler -database {params.db_name} -threads {threads} -LTRStruct &>> {log}
         '''
 
 rule metarepeatmasker:
@@ -300,7 +300,7 @@ rule repeatmodeler:
     shell:
         '''
         BuildDatabase -name {params.db_name} {input} &> {log}
-        RepeatModeler -database {params.db_name} -threads {threads} &>> {log}
+        RepeatModeler -database {params.db_name} -threads {threads} -LTRStruct &>> {log}
         '''
 
 rule repeatmasker:
