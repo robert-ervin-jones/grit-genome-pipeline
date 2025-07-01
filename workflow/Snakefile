@@ -12,7 +12,7 @@ else:
 
 rule all:
     input:
-        expand('results/final/{sample}/assembly.fasta', sample=samples),
+        expand('results/final/{sample}/eukaryotes.fasta', sample=samples),
         
 rule clean_fastq:
     input:
