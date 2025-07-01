@@ -311,7 +311,7 @@ rule repeatmasker:
         'results/repeatmasker/{sample}/eukaryotes.fasta.masked'
     log:
         'results/logs/repeatmasker/{sample}.log'
-    params:r 'x's if comb
+    params:
         out_dir='results/repeatmasker/{sample}'
     threads:
         workflow.cores
