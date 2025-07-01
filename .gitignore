@@ -1,6 +1,6 @@
 data/
 .snakemake/
 results/
-resources/bakta-light/
+resources/db-light/
 resources/eggnog_dbs/
 resources/augustus_config/species/Sp_*

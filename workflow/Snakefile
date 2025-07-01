@@ -14,8 +14,6 @@ rule all:
     input:
         expand('results/final/{sample}/assembly.fasta', sample=samples),
         
-
-
 rule clean_fastq:
     input:
         'data/{sample}.fastq.gz'
@@ -92,9 +90,48 @@ rule metawhokaryote:
     shell:
         'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
 
+rule metarepeatmodeler:
+    input:
+        'results/whokaryote/{sample}/eukaryotes.fasta'
+    output:
+        'results/metarepeatmodeler/{sample}/{sample}-families.fa'
+    log:
+        'results/logs/metarepeatmodeler/{sample}.log'
+    params:
+        out_dir='results/metarepeatmodeler/{sample}',
+        db_name='results/metarepeatmodeler/{sample}/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/repeatmodeler.yaml'
+    shell:
+        '''
+        BuildDatabase -name {params.db_name} {input} &> {log}
+        RepeatModeler -database {params.db_name} -threads {threads} &>> {log}
+        '''
+
+rule metarepeatmasker:
+    input:
+        genome='results/whokaryote/{sample}/eukaryotes.fasta',
+        library='results/metarepeatmodeler/{sample}/{sample}-families.fa'
+    output:
+        'results/metarepeatmasker/{sample}/eukaryotes.fasta.masked'
+    log:
+        'results/logs/metarepeatmasker/{sample}.log'
+    params:
+        out_dir='results/metarepeatmasker/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/repeatmodeler.yaml'
+    shell:
+        '''
+        RepeatMasker -lib {input.library} -dir {params.out_dir} -pa {threads} {input.genome} &> {log}
+        '''
+
 rule metabraker:
     input:
-        'results/metawhokaryote/{sample}/eukaryotes.fasta',
+        'results/metarepeatmasker/{sample}/eukaryotes.fasta.masked',
     output:
         'results/metabraker/{sample}/braker.aa'
     log:
@@ -158,14 +195,14 @@ rule metabakta:
     shell:
         'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
 
-rule meta_gc_content:
+rule metagc_content:
     input:
         'results/metawhokaryote/{sample}/whokaryote_predictions_T.tsv',
         'results/metaflye/{sample}/assembly.fasta'
     output:
-        'results/meta_gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+        'results/metagc_content/{sample}/whokaryote_predictions_T_gc.tsv'
     log:
-        'results/logs/meta_gc_content/{sample}.log'
+        'results/logs/metagc_content/{sample}.log'
     script:
         'scripts/post_who_gc_content.py'
 
@@ -246,11 +283,51 @@ rule whokaryote:
     shell:
         'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
 
+rule repeatmodeler:
+    input:
+        'results/whokaryote/{sample}/eukaryotes.fasta'
+    output:
+        'results/repeatmodeler/{sample}/{sample}-families.fa'
+    log:
+        'results/logs/repeatmodeler/{sample}.log'
+    params:
+        out_dir='results/repeatmodeler/{sample}',
+        db_name='results/repeatmodeler/{sample}/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/repeatmodeler.yaml'
+    shell:
+        '''
+        BuildDatabase -name {params.db_name} {input} &> {log}
+        RepeatModeler -database {params.db_name} -threads {threads} &>> {log}
+        '''
+
+rule repeatmasker:
+    input:
+        genome='results/whokaryote/{sample}/eukaryotes.fasta',
+        library='results/repeatmodeler/{sample}/{sample}-families.fa'
+    output:
+        'results/repeatmasker/{sample}/eukaryotes.fasta.masked'
+    log:
+        'results/logs/repeatmasker/{sample}.log'
+    params:
+        out_dir='results/repeatmasker/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/repeatmodeler.yaml'
+    shell:
+        '''
+        RepeatMasker -lib {input.library} -dir {params.out_dir} -pa {threads} {input.genome} &> {log}
+        '''
+
 rule braker:
     input:
-        'results/whokaryote/{sample}/eukaryotes.fasta',
+        'results/repeatmasker/{sample}/eukaryotes.fasta.masked',
     output:
-        'results/braker/{sample}/braker.aa'
+        'results/braker/{sample}/braker.aa',
+        'results/braker/{sample}/braker.gtf'
     log:
         'results/logs/braker/{sample}.log'
     params:
@@ -327,7 +404,7 @@ rule gc_content:
 rule plot_gc:
     input:
         'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv',
-        'results/meta_gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+        'results/metagc_content/{sample}/whokaryote_predictions_T_gc.tsv'
     output:
         'results/gc_content/{sample}/gc_plot.pdf'
     log:
@@ -367,7 +444,7 @@ rule eggnog:
 rule cp_final_output:
     input:
         'results/flye/{sample}/assembly_graph.gfa',
-        'results/flye/{sample}/assembly.fasta',
+        'results/whokaryote/{sample}/eukaryotes.fasta',
         'results/braker/{sample}/braker.aa',
         'results/metabraker/{sample}/braker.aa',
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
@@ -377,7 +454,7 @@ rule cp_final_output:
         'results/eggnog/{sample}/eukaryotes.emapper.annotations'
     output:
         'results/final/{sample}/assembly_graph.gfa',
-        'results/final/{sample}/assembly.fasta',
+        'results/final/{sample}/eukaryotes.fasta',
         'results/final/{sample}/braker.aa',
         'results/final/{sample}/metabraker.aa',
         'results/final/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
