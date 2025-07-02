@@ -126,7 +126,7 @@ rule metarepeatmasker:
         'envs/repeatmodeler.yaml'
     shell:
         '''
-        RepeatMasker -lib {input.library} -dir {params.out_dir} -xsmall -pa {threads} {input.genome} &> {log}
+        RepeatMasker -lib {input.library} -dir {params.out_dir} -nolow -xsmall -pa {threads} {input.genome} &> {log}
         '''
 
 rule metabraker:
@@ -319,7 +319,7 @@ rule repeatmasker:
         'envs/repeatmodeler.yaml'
     shell:
         '''
-        RepeatMasker -lib {input.library} -dir {params.out_dir} -xsmall -pa {threads} {input.genome} &> {log}
+        RepeatMasker -lib {input.library} -dir {params.out_dir} -nolow -xsmall -pa {threads} {input.genome} &> {log}
         '''
 
 rule braker:
