@@ -411,7 +411,7 @@ rule plot_gc:
         'results/logs/gc_content/{sample}_plot.log'
     script:
         'scripts/dot_plot.R'
-
+--tax_scope
 
 rule eggnog:
     input:
@@ -437,6 +437,7 @@ rule eggnog:
             --output_dir {params.out_dir} \
             --cpu {threads} \
             --data_dir {params.db_dir} \
+            --tax_scope 2759 \
             --decorate_gff {input[1]} &> {log}
         '''
 
