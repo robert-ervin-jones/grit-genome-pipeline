@@ -6,6 +6,7 @@ This repository contains a Snakemake-based workflow for long-read genome assembl
 - Read cleaning and filtering
 - Assembly with Flye
 - Eukaryote/prokaryote separation with Whokaryote
+- Repeat masking with RepeatModeler and RepeatMasker
 - Gene prediction with BRAKER
 - Functional annotation with eggNOG-mapper
 - Quality assessment with BUSCO
