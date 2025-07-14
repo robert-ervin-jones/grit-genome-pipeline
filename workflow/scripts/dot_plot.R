@@ -23,62 +23,63 @@ df <- read.table(input_file_1, sep = '\t', header = TRUE)
 
 # Create dot plot for contigs
 dp1 <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
-    geom_dotplot(binaxis='y', stackdir='up',
-        stackratio=0.025, dotsize=0.5) +
-    theme_bw() +
-    theme(axis.line = element_line(colour = "black"),
-        panel.background = element_blank(),
-        panel.border = element_rect(colour = "black", fill=NA, size=1)) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-        legend.position = "bottom") +
-    labs(title = "GC Content Distribution by Organism Type",
-        x = "Organism Type", 
-        y = "GC Content (%)",
-        fill = "Type")
+      geom_dotplot(binaxis='y', stackdir='up',
+            stackratio=0.025, dotsize=0.5) +
+      theme_bw() +
+      theme(axis.line = element_line(colour = "black"),
+            panel.background = element_blank(),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+      theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+            legend.position = "bottom") +
+      coord_flip() +
+      labs(title = "GC Content Distribution by Organism Type",
+            x = "Organism Type", 
+            y = "GC Content (%)",
+            fill = "Type")
 
 # Create histogram for overall GC distribution
 h1 <- ggplot(df, aes(x=gc_content)) +
-    geom_histogram(binwidth=2, alpha=0.7, color="black", 
-        fill="lightblue") +
-    geom_density(alpha=0.3, fill="#FF6666") +
-    theme_bw() +
-    theme(axis.line = element_line(colour = "black"),
-        panel.background = element_blank(),
-        panel.border = element_rect(colour = "black", fill=NA, size=1)) +
-    labs(title="Overall GC Content Distribution",
-        x = "GC Content (%)", 
-        y = "Frequency")
+      geom_histogram(binwidth=2, alpha=0.7, color="black", 
+            fill="lightblue") +
+      geom_density(alpha=0.3, fill="#FF6666") +
+      theme_bw() +
+      theme(axis.line = element_line(colour = "black"),
+            panel.background = element_blank(),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+      labs(title="Overall GC Content Distribution",
+            x = "GC Content (%)", 
+            y = "Frequency")
 
 # Read the data
 df <- read.table(input_file_2, sep = '\t', header = TRUE)
 
 # Create dot plot for contigs
 dp2 <- ggplot(df, aes(x=who, y=gc_content, fill=who)) +
-    geom_dotplot(binaxis='y', stackdir='up',
-        stackratio=0.025, dotsize=0.5) +
-    theme_bw() +
-    theme(axis.line = element_line(colour = "black"),
-        panel.background = element_blank(),
-        panel.border = element_rect(colour = "black", fill=NA, size=1)) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-        legend.position = "bottom") +
-    labs(title = "GC Content Distribution by Organism Type",
-        x = "Organism Type", 
-        y = "GC Content (%)",
-        fill = "Type")
+      geom_dotplot(binaxis='y', stackdir='up',
+            stackratio=0.025, dotsize=0.5) +
+      theme_bw() +
+      theme(axis.line = element_line(colour = "black"),
+            panel.background = element_blank(),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+      theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+            legend.position = "bottom") +
+      labs(title = "GC Content Distribution by Organism Type",
+            x = "Organism Type", 
+            y = "GC Content (%)",
+            fill = "Type")
 
 # Create histogram for overall GC distribution
 h2 <- ggplot(df, aes(x=gc_content)) +
-    geom_histogram(binwidth=2, alpha=0.7, color="black", 
-        fill="lightblue") +
-    geom_density(alpha=0.3, fill="#FF6666") +
-    theme_bw() +
-    theme(axis.line = element_line(colour = "black"),
-        panel.background = element_blank(),
-        panel.border = element_rect(colour = "black", fill=NA, size=1)) +
-    labs(title="Overall GC Content Distribution",
-        x = "GC Content (%)", 
-        y = "Frequency")
+      geom_histogram(binwidth=2, alpha=0.7, color="black", 
+            fill="lightblue") +
+      geom_density(alpha=0.3, fill="#FF6666") +
+      theme_bw() +
+      theme(axis.line = element_line(colour = "black"),
+            panel.background = element_blank(),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+      labs(title="Overall GC Content Distribution",
+            x = "GC Content (%)", 
+            y = "Frequency")
 
 # Combine plots
 combined_plot <- ggarrange(h1, dp2, h2, dp2, ncol = 2, nrow = 2)

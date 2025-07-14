@@ -2,7 +2,7 @@ import subprocess
 import argparse
 import os
 
-def make_config_1():
+def make_config():
     '''
     Make config list to be passed to
 
@@ -24,7 +24,7 @@ def run_snakemake(length_filter=False):
     '''
     smk_frags = [
         f'snakemake',
-        f'--config {make_config_1()}',
+        f'--config {make_config()}',
         f'--cores {args.threads}',
         f'--rerun-incomplete',
         f'--use-conda',

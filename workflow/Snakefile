@@ -30,13 +30,13 @@ rule clean_fastq:
     shell:
         'minimap2 -t {threads} -ax map-ont {params.contam} {input} 2> {log} | samtools fastq -n -f 4 - 2>> {log} | gzip > {output} 2>> {log}'
 
-rule metachopper:
+rule chopper:
     input:
         'results/clean_fastq/{sample}.fastq.gz'
     output:
-        'results/metachopper/{sample}.fastq.gz'
+        'results/chopper/{sample}.fastq.gz'
     log:
-        'results/logs/metachopper/{sample}.log'
+        'results/logs/chopper/{sample}.log'
     params:
         length = 5000,
         quality = 20
@@ -49,7 +49,7 @@ rule metachopper:
 
 rule metaflye:
     input:
-        'results/metachopper/{sample}.fastq.gz'
+        'results/chopper/{sample}.fastq.gz'
     output:
         'results/metaflye/{sample}/assembly.fasta',
         'results/metaflye/{sample}/assembly_graph.gfa',
@@ -67,199 +67,6 @@ rule metaflye:
         '''
         flye \
             --meta \
-            --nano-hq {input} \
-            --out-dir {params.out_dir} \
-            --threads {threads} &> {log}
-        '''
-
-rule metawhokaryote:
-    input:
-        'results/metaflye/{sample}/assembly.fasta'
-    output:
-        'results/metawhokaryote/{sample}/eukaryotes.fasta',
-        'results/metawhokaryote/{sample}/prokaryotes.fasta',
-        'results/metawhokaryote/{sample}/whokaryote_predictions_T.tsv',
-    log:
-        'results/logs/metawhokaryote/{sample}.log'
-    threads:
-        workflow.cores
-    params:
-        out_dir='results/metawhokaryote/{sample}',
-    conda:
-        'envs/whokaryote.yaml'
-    shell:
-        'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
-
-rule metarepeatmodeler:
-    input:
-        'results/whokaryote/{sample}/eukaryotes.fasta'
-    output:
-        'results/metarepeatmodeler/{sample}/{sample}-families.fa'
-    log:
-        'results/logs/metarepeatmodeler/{sample}.log'
-    params:
-        out_dir='results/metarepeatmodeler/{sample}',
-        db_name='results/metarepeatmodeler/{sample}/{sample}'
-    threads:
-        workflow.cores
-    conda:
-        'envs/repeatmodeler.yaml'
-    shell:
-        '''
-        BuildDatabase -name {params.db_name} {input} &> {log}
-        RepeatModeler -database {params.db_name} -threads {threads} -LTRStruct &>> {log}
-        '''
-
-rule metarepeatmasker:
-    input:
-        genome='results/whokaryote/{sample}/eukaryotes.fasta',
-        library='results/metarepeatmodeler/{sample}/{sample}-families.fa'
-    output:
-        'results/metarepeatmasker/{sample}/eukaryotes.fasta.masked'
-    log:
-        'results/logs/metarepeatmasker/{sample}.log'
-    params:
-        out_dir='results/metarepeatmasker/{sample}'
-    threads:
-        workflow.cores
-    conda:
-        'envs/repeatmodeler.yaml'
-    shell:
-        '''
-        RepeatMasker -lib {input.library} -dir {params.out_dir} -xsmall -pa {threads} {input.genome} &> {log}
-        '''
-
-rule metabraker:
-    input:
-        'results/metarepeatmasker/{sample}/eukaryotes.fasta.masked',
-    output:
-        'results/metabraker/{sample}/braker.aa'
-    log:
-        'results/logs/metabraker/{sample}.log'
-    params:
-        out_dir='results/metabraker/{sample}',
-        config_dir=aug_config,
-    threads:
-        braker_threads
-    container:
-        'docker://teambraker/braker3:latest'
-    shell:
-        '''
-        braker.pl \
-            --genome {input} \
-            --esmode \
-            --threads {threads} \
-            --AUGUSTUS_CONFIG_PATH {params.config_dir} \
-            --workingdir {params.out_dir} &> {log}
-        '''
-
-rule metabusco:
-    input:
-        'results/metabraker/{sample}/braker.aa'
-    output:
-        'results/metabusco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt'
-    log:
-        'results/logs/metabusco/{sample}.log'
-    params:
-        out_dir='results/metabusco/{sample}',
-        lineage=os.path.join(busco_downloads, 'lineages/eukaryota_odb10'),
-    threads:
-        workflow.cores
-    container:
-        'docker://ezlabgva/busco:v5.8.2_cv1'
-    shell:
-        '''
-        busco \
-            -i {input} \
-            -o {params.out_dir} \
-            -m prot \
-            -l {params.lineage} \
-            --offline \
-            -q \
-            -f &> {log}
-        rm -r busco_downloads
-        '''
-
-rule metabakta:
-    input:
-        'results/metawhokaryote/{sample}/prokaryotes.fasta'
-    output:
-        'results/metabakta/{sample}/prokaryotes.gff3'
-    log:
-        'results/logs/metabakta/{sample}.log'
-    params:
-        out_dir='results/metabakta/{sample}',
-        db=os.path.join(str(config['wrapper_dir']), 'resources/db-light'),
-    conda:
-        'envs/bakta.yaml'
-    shell:
-        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
-
-rule metagc_content:
-    input:
-        'results/metawhokaryote/{sample}/whokaryote_predictions_T.tsv',
-        'results/metaflye/{sample}/assembly.fasta'
-    output:
-        'results/metagc_content/{sample}/whokaryote_predictions_T_gc.tsv'
-    log:
-        'results/logs/metagc_content/{sample}.log'
-    script:
-        'scripts/post_who_gc_content.py'
-
-rule cleaner_fastq:
-    input:
-        'results/metawhokaryote/{sample}/prokaryotes.fasta',
-        'results/clean_fastq/{sample}.fastq.gz'
-    output:
-        'results/cleaner_fastq/{sample}.fastq.gz'
-    log:
-        'results/logs/cleaner_fastq/{sample}.log'
-    threads:
-        workflow.cores
-    conda:
-        'envs/clean_fastq.yaml'
-    shell:
-        '''
-        minimap2 -t {threads} -ax map-ont {input[0]} {input[1]} 2> {log} | \
-        samtools fastq -n -f 4 - | gzip > {output} 2>> {log}
-        '''
-
-rule chopper:
-    input:
-        'results/cleaner_fastq/{sample}.fastq.gz'
-    output:
-        'results/chopper/{sample}.fastq.gz'
-    log:
-        'results/logs/chopper/{sample}.log'
-    params:
-        length = 5000,
-        quality = 15
-    threads:
-        workflow.cores
-    conda:
-        'envs/chopper.yaml'
-    shell:
-        'gunzip -c {input} 2> {log} | chopper -l {params.length} -q {params.quality} --threads {threads} 2>> {log} | gzip > {output} 2>> {log}'
-
-rule flye:
-    input:
-        'results/chopper/{sample}.fastq.gz'
-    output:
-        'results/flye/{sample}/assembly.fasta',
-        'results/flye/{sample}/assembly_graph.gfa',
-        'results/flye/{sample}/assembly_graph.gv',
-        'results/flye/{sample}/assembly_info.txt',
-    log:
-        'results/logs/flye/{sample}.log'
-    params:
-        out_dir='results/flye/{sample}'
-    threads:
-        workflow.cores
-    conda:
-        'envs/flye.yaml'
-    shell:
-        '''
-        flye \
             --nano-hq {input} \
             --out-dir {params.out_dir} \
             --threads {threads} &> {log}
@@ -283,9 +90,191 @@ rule whokaryote:
     shell:
         'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
 
+rule bakta:
+    input:
+        'results/whokaryote/{sample}/prokaryotes.fasta'
+    output:
+        'results/bakta/{sample}/prokaryotes.gff3'
+    log:
+        'results/logs/bakta/{sample}.log'
+    params:
+        out_dir='results/bakta/{sample}',
+        db=os.path.join(str(config['wrapper_dir']), 'resources/db-light'),
+    conda:
+        'envs/bakta.yaml'
+    shell:
+        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
+
+rule gc_content:
+    input:
+        'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
+        'results/flye/{sample}/assembly.fasta'
+    output:
+        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+    log:
+        'results/logs/gc_content/{sample}.log'
+    script:
+        'scripts/post_who_gc_content.py'
+
+rule cleaner_fastq:
+    input:
+        'results/whokaryote/{sample}/prokaryotes.fasta',
+        'results/clean_fastq/{sample}.fastq.gz'
+    output:
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    log:
+        'results/logs/cleaner_fastq/{sample}.log'
+    threads:
+        workflow.cores
+    conda:
+        'envs/clean_fastq.yaml'
+    shell:
+        '''
+        minimap2 -t {threads} -ax map-ont {input[0]} {input[1]} 2> {log} | \
+        samtools fastq -n -f 4 - | gzip > {output} 2>> {log}
+        '''
+
+rule nextdenvovo:
+    input:
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    output:
+        'results/nextdenovo/{sample}/assembly.fasta',
+        'results/nextdenovo/{sample}/assembly_graph.gfa',
+        'results/nextdenovo/{sample}/assembly_graph.gv',
+        'results/nextdenovo/{sample}/assembly_info.txt',
+    log:
+        'results/logs/nextdenovo/{sample}.log'
+    params:
+        out_dir='results/nextdenovo/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/nextdenovo.yaml'
+    shell:
+        '''
+        nextdenovo \
+            --fastq {input} \
+            --outdir {params.out_dir} \
+            --threads {threads} &> {log}
+        '''
+
+rule nextdenovo_whokaryote:
+    input:
+        'results/nextdenovo/{sample}/assembly.fasta'
+    output:
+        'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
+        'results/nextdenovo_whokaryote/{sample}/prokaryotes.fasta',
+        'results/nextdenovo_whokaryote/{sample}/whokaryote_predictions_T.tsv',
+    log:
+        'results/logs/nextdenovo_whokaryote/{sample}.log'
+    threads:
+        workflow.cores
+    params:
+        out_dir='results/nextdenovo_whokaryote/{sample}',
+    conda:
+        'envs/whokaryote.yaml'
+    shell:
+        'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
+
+rule ragtag_scaffold:
+    input:
+        'results/nextdenovo/{sample}/assembly.fasta',
+        'results/nextdenovo/{sample}/assembly_graph.gfa',
+        'results/nextdenovo/{sample}/assembly_graph.gv',
+        'results/nextdenovo/{sample}/assembly_info.txt'
+    output:
+        'results/ragtag/{sample}/ragtag.scaffold.fasta',
+        'results/ragtag/{sample}/ragtag.scaffold.gff3'
+    log:
+        'results/logs/ragtag/{sample}.log'
+    threads:
+        workflow.cores
+    params:
+        out_dir='results/ragtag/{sample}'
+    conda:
+        'envs/ragtag.yaml'
+    shell:
+        '''
+        ragtag.py \
+            --assembly {input[0]} \
+            --gfa {input[1]} \
+            --gv {input[2]} \
+            --info {input[3]} \
+            --outdir {params.out_dir} \
+            --threads {threads} &> {log}
+        '''
+
+rule quickmerge:
+    input:
+        'results/nextdenovo/{sample}/assembly.fasta',
+        'results/ragtag/{sample}/ragtag.scaffold.fasta'
+    output:
+        'results/quickmerge/{sample}/merged_assembly.fasta'
+    log:
+        'results/logs/quickmerge/{sample}.log'
+    params:
+        out_dir='results/quickmerge/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/quickmerge.yaml'
+    shell:
+        '''
+        quickmerge \
+            --input {input[0]} {input[1]} \
+            --output {params.out_dir}/merged_assembly.fasta \
+            --threads {threads} &> {log}
+        '''
+
+rule racon:
+    input:
+        'results/quickmerge/{sample}/merged_assembly.fasta',
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    output:
+        'results/racon/{sample}/racon_corrected.fasta'
+    log:
+        'results/logs/racon/{sample}.log'
+    params:
+        out_dir='results/racon/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/racon.yaml'
+    shell:
+        '''
+        racon \
+            -t {threads} \
+            {input[1]} \
+            {input[0]} \
+            {input[1]} > {output} 2> {log}
+        '''
+
+rule medaka:
+    input:
+        'results/racon/{sample}/racon_corrected.fasta',
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    output:
+        'results/medaka/{sample}/medaka_consensus.fasta'
+    log:
+        'results/logs/medaka/{sample}.log'
+    params:
+        out_dir='results/medaka/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/medaka.yaml'
+    shell:
+        '''
+        medaka consensus \
+            -i {input[1]} \
+            -d {input[0]} \
+            -o {params.out_dir} \
+            -t {threads} &> {log}
+        '''
+
 rule repeatmodeler:
     input:
-        'results/whokaryote/{sample}/eukaryotes.fasta'
+        'results/medaka/{sample}/medaka_consensus.fasta'
     output:
         'results/repeatmodeler/{sample}/{sample}-families.fa'
     log:
@@ -305,10 +294,10 @@ rule repeatmodeler:
 
 rule repeatmasker:
     input:
-        genome='results/whokaryote/{sample}/eukaryotes.fasta',
+        genome= 'results/medaka/{sample}/medaka_consensus.fasta',
         library='results/repeatmodeler/{sample}/{sample}-families.fa'
     output:
-        'results/repeatmasker/{sample}/eukaryotes.fasta.masked'
+        'results/repeatmasker/{sample}/medaka_consensus.fasta.masked'
     log:
         'results/logs/repeatmasker/{sample}.log'
     params:
@@ -324,10 +313,9 @@ rule repeatmasker:
 
 rule braker:
     input:
-        'results/repeatmasker/{sample}/eukaryotes.fasta.masked',
+        'results/repeatmasker/{sample}/medaka_consensus.fasta.masked',
     output:
-        'results/braker/{sample}/braker.aa',
-        'results/braker/{sample}/braker.gtf'
+        'results/braker/{sample}/braker.aa'
     log:
         'results/logs/braker/{sample}.log'
     params:
@@ -336,7 +324,7 @@ rule braker:
     threads:
         braker_threads
     container:
-        'docker://teambraker/braker3:v3.0.7.6'
+        'docker://teambraker/braker3:latest'
     shell:
         '''
         braker.pl \
@@ -374,45 +362,6 @@ rule busco:
         rm -r busco_downloads
         '''
 
-rule bakta:
-    input:
-        'results/whokaryote/{sample}/prokaryotes.fasta'
-    output:
-        'results/bakta/{sample}/prokaryotes.gff3'
-    log:
-        'results/logs/bakta/{sample}.log'
-    params:
-        out_dir='results/bakta/{sample}',
-        db=os.path.join(str(config['wrapper_dir']), 'resources/db-light'),
-    conda:
-        'envs/bakta.yaml'
-    shell:
-        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
-
-rule gc_content:
-    input:
-        'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
-        'results/flye/{sample}/assembly.fasta'
-    output:
-        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
-    log:
-        'results/logs/gc_content/{sample}.log'
-    script:
-        'scripts/post_who_gc_content.py'
-
-
-rule plot_gc:
-    input:
-        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv',
-        'results/metagc_content/{sample}/whokaryote_predictions_T_gc.tsv'
-    output:
-        'results/gc_content/{sample}/gc_plot.pdf'
-    log:
-        'results/logs/gc_content/{sample}_plot.log'
-    script:
-        'scripts/dot_plot.R'
---tax_scope
-
 rule eggnog:
     input:
         'results/braker/{sample}/braker.aa',
@@ -444,23 +393,19 @@ rule eggnog:
 
 rule cp_final_output:
     input:
-        'results/flye/{sample}/assembly_graph.gfa',
+        'results/metaflye/{sample}/assembly_graph.gfa',
         'results/whokaryote/{sample}/eukaryotes.fasta',
         'results/braker/{sample}/braker.aa',
-        'results/metabraker/{sample}/braker.aa',
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/bakta/{sample}/prokaryotes.gff3',
-        'results/metabakta/{sample}/prokaryotes.gff3',
         'results/gc_content/{sample}/gc_plot.pdf',
         'results/eggnog/{sample}/eukaryotes.emapper.annotations'
     output:
         'results/final/{sample}/assembly_graph.gfa',
         'results/final/{sample}/eukaryotes.fasta',
         'results/final/{sample}/braker.aa',
-        'results/final/{sample}/metabraker.aa',
         'results/final/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/final/{sample}/prokaryotes.gff3',
-        'results/final/{sample}/metaprokaryotes.gff3',
         'results/final/{sample}/gc_plot.pdf',
         'results/final/{sample}/eukaryotes.emapper.annotations'
     log:
@@ -476,6 +421,4 @@ rule cp_final_output:
         cp {input[4]} {output[4]} &>> {log}
         cp {input[5]} {output[5]} &>> {log}
         cp {input[6]} {output[6]} &>> {log}
-        cp {input[7]} {output[7]} &>> {log}
-        cp {input[8]} {output[8]} &>> {log}
         '''
