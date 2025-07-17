@@ -67,6 +67,7 @@ rule metaflye:
         '''
         flye \
             --meta \
+            --no-alt-contigs \
             --nano-hq {input} \
             --out-dir {params.out_dir} \
             --threads {threads} &> {log}
@@ -74,11 +75,12 @@ rule metaflye:
 
 rule whokaryote:
     input:
-        'results/flye/{sample}/assembly.fasta'
+        'results/metaflye/{sample}/assembly.fasta'
     output:
         'results/whokaryote/{sample}/eukaryotes.fasta',
         'results/whokaryote/{sample}/prokaryotes.fasta',
         'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
+        'results/whokaryote/{sample}/N50.txt'
     log:
         'results/logs/whokaryote/{sample}.log'
     threads:
@@ -88,7 +90,10 @@ rule whokaryote:
     conda:
         'envs/whokaryote.yaml'
     shell:
-        'whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}'
+        '''
+        whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}
+        Bandage info {params.out_dir}/eukaryotes.fasta |grep "N50" |cut -d " " -f 27 > N50.txt
+        '''
 
 rule bakta:
     input:
@@ -108,9 +113,10 @@ rule bakta:
 rule gc_content:
     input:
         'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
-        'results/flye/{sample}/assembly.fasta'
+        'results/metaflye/{sample}/assembly.fasta'
     output:
-        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv'
+        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv',
+        'results/gc_content/{sample}/gc_plot.pdf',
     log:
         'results/logs/gc_content/{sample}.log'
     script:
@@ -131,36 +137,62 @@ rule cleaner_fastq:
     shell:
         '''
         minimap2 -t {threads} -ax map-ont {input[0]} {input[1]} 2> {log} | \
-        samtools fastq -n -f 4 - | gzip > {output} 2>> {log}
+        samtools f
+rule bakta:
+    input:
+        'results/whokaryote/{sample}/prokaryotes.fasta'
+    output:
+        'results/bakta/{saastq -n -f 4 - | gzip > {output} 2>> {log}
         '''
 
 rule nextdenvovo:
     input:
-        'results/cleaner_fastq/{sample}.fastq.gz'
+        'results/cleaner_fastq/{sample}.fastq.gz',
+        'results/whokaryote/{sample}/eukaryotes.fasta',
     output:
-        'results/nextdenovo/{sample}/assembly.fasta',
-        'results/nextdenovo/{sample}/assembly_graph.gfa',
-        'results/nextdenovo/{sample}/assembly_graph.gv',
-        'results/nextdenovo/{sample}/assembly_info.txt',
+        'results/nextdenovo/{sample}/03.ctg_graph/nd.asm.fasta',
     log:
         'results/logs/nextdenovo/{sample}.log'
     params:
-        out_dir='results/nextdenovo/{sample}'
+        out_dir='results/nextdenovo/{sample}',
     threads:
         workflow.cores
     conda:
         'envs/nextdenovo.yaml'
     shell:
         '''
-        nextdenovo \
-            --fastq {input} \
-            --outdir {params.out_dir} \
-            --threads {threads} &> {log}
+        ls {input[0]} > input.fofn
+        echo "[General]" > run.cfg
+        echo "job_type = local" >> run.cfg
+        echo "job_prefix = nextDenovo" >> run.cfg
+        echo "task = all" >> run.cfg
+        echo "rewrite = yes" >> run.cfg
+        echo "deltmp = yes" >> run.cfg
+        echo "parallel_jobs = {threads}" >> run.cfg
+        echo "input_type = raw" >> run.cfg
+        echo "read_type = ont" >> run.cfg
+        echo "input_fofn = input.fofn" >> run.cfg
+        echo "workdir = {params.out_dir}" >> run.cfg
+        echo "" >> run.cfg
+        echo "[correct_option]" >> run.cfg
+        echo "read_cutoff = 1k" >> run.cfg
+        echo -n "genome_size = " >> run.cfg
+        grep -o -E '[ATCG]' {input[1]} | wc -l >> run.cfg
+        echo "sort_options = -m 20g -t 15" >> run.cfg
+        echo "minimap2_options_raw = -t 8" >> run.cfg
+        echo "pa_correction = 3" >> run.cfg
+        echo "correction_options = -p 15" >> run.cfg
+        echo "" >> run.cfg
+        echo "[assemble_option]" >> run.cfg
+        echo "minimap2_options_cns = -t 8" >> run.cfg
+        echo "nextgraph_options = -a 1" >> run.cfg
+        nextDenovo run.cfg &> {log}
         '''
+        
 
 rule nextdenovo_whokaryote:
     input:
-        'results/nextdenovo/{sample}/assembly.fasta'
+        'results/nextdenovo/{sample}/03.ctg_graph/nd.asm.fasta'
     output:
         'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
         'results/nextdenovo_whokaryote/{sample}/prokaryotes.fasta',
@@ -178,13 +210,10 @@ rule nextdenovo_whokaryote:
 
 rule ragtag_scaffold:
     input:
-        'results/nextdenovo/{sample}/assembly.fasta',
-        'results/nextdenovo/{sample}/assembly_graph.gfa',
-        'results/nextdenovo/{sample}/assembly_graph.gv',
-        'results/nextdenovo/{sample}/assembly_info.txt'
+        'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
+        'results/whokaryote/{sample}/eukaryotes.fasta',
     output:
         'results/ragtag/{sample}/ragtag.scaffold.fasta',
-        'results/ragtag/{sample}/ragtag.scaffold.gff3'
     log:
         'results/logs/ragtag/{sample}.log'
     threads:
@@ -195,21 +224,18 @@ rule ragtag_scaffold:
         'envs/ragtag.yaml'
     shell:
         '''
-        ragtag.py \
-            --assembly {input[0]} \
-            --gfa {input[1]} \
-            --gv {input[2]} \
-            --info {input[3]} \
-            --outdir {params.out_dir} \
-            --threads {threads} &> {log}
+        ragtag.py scaffold \
+            -o {params.out_dir} \
+            {input[1]} {input[0]} &> {log}
         '''
 
 rule quickmerge:
     input:
-        'results/nextdenovo/{sample}/assembly.fasta',
-        'results/ragtag/{sample}/ragtag.scaffold.fasta'
+        'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
+        'results/ragtag/{sample}/ragtag.scaffold.fasta',
+        'results/whokaryote/{sample}/N50.txt'
     output:
-        'results/quickmerge/{sample}/merged_assembly.fasta'
+        'results/quickmerge/{sample}/merged_metaflye_nextdenovo.fasta'
     log:
         'results/logs/quickmerge/{sample}.log'
     params:
@@ -220,15 +246,17 @@ rule quickmerge:
         'envs/quickmerge.yaml'
     shell:
         '''
-        quickmerge \
-            --input {input[0]} {input[1]} \
-            --output {params.out_dir}/merged_assembly.fasta \
-            --threads {threads} &> {log}
+        N50=$(head input[2])
+        merge_wrapper.py \
+            {input[1]} {input[0]} \
+            -l $N50 \
+            -pre metaflye_nextdenovo &> {log}
+        mv merged_metaflye_nextdenovo.fasta {params.out_dir}
         '''
 
 rule racon:
     input:
-        'results/quickmerge/{sample}/merged_assembly.fasta',
+        'results/quickmerge/{sample}/merged_metaflye_nextdenovo.fasta',
         'results/cleaner_fastq/{sample}.fastq.gz'
     output:
         'results/racon/{sample}/racon_corrected.fasta'
@@ -315,7 +343,8 @@ rule braker:
     input:
         'results/repeatmasker/{sample}/medaka_consensus.fasta.masked',
     output:
-        'results/braker/{sample}/braker.aa'
+        'results/braker/{sample}/braker.aa',
+        'results/braker/{sample}/braker.gtf'
     log:
         'results/logs/braker/{sample}.log'
     params:
@@ -387,7 +416,7 @@ rule eggnog:
             --cpu {threads} \
             --data_dir {params.db_dir} \
             --tax_scope 2759 \
-            --decorate_gff {input[1]} &> {log}
+            --dassemblyecorate_gff {input[1]} &> {log}
         '''
 
 
