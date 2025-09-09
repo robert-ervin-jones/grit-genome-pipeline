@@ -10,6 +10,11 @@ if workflow.cores > 48:
 else:
     braker_threads = workflow.cores
 
+if workflow.cores > 20:
+    nextdenovo_threads = 20
+else:
+    nextdenovo_threads = workflow.cores
+
 rule all:
     input:
         expand('results/final/{sample}/eukaryotes.fasta', sample=samples),
@@ -38,8 +43,8 @@ rule chopper:
     log:
         'results/logs/chopper/{sample}.log'
     params:
-        length = 5000,
-        quality = 20
+        length = 1000,
+        quality = 10
     threads:
         workflow.cores
     conda:
@@ -68,7 +73,7 @@ rule metaflye:
         flye \
             --meta \
             --no-alt-contigs \
-            --nano-hq {input} \
+            --nano-raw {input} \
             --out-dir {params.out_dir} \
             --threads {threads} &> {log}
         '''
@@ -80,7 +85,6 @@ rule whokaryote:
         'results/whokaryote/{sample}/eukaryotes.fasta',
         'results/whokaryote/{sample}/prokaryotes.fasta',
         'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
-        'results/whokaryote/{sample}/N50.txt'
     log:
         'results/logs/whokaryote/{sample}.log'
     threads:
@@ -92,7 +96,6 @@ rule whokaryote:
     shell:
         '''
         whokaryote.py --contigs {input} --outdir {params.out_dir} --threads {threads} --f &> {log}
-        Bandage info {params.out_dir}/eukaryotes.fasta |grep "N50" |cut -d " " -f 27 > N50.txt
         '''
 
 rule bakta:
@@ -108,15 +111,13 @@ rule bakta:
     conda:
         'envs/bakta.yaml'
     shell:
-        'bakta --db {params.db} --force --output {params.out_dir} {input} &> {log}'
+        'bakta --keep-contig-headers --db {params.db} --force --output {params.out_dir} {input} &> {log}'
 
 rule gc_content:
     input:
         'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
         'results/metaflye/{sample}/assembly.fasta'
     output:
-        'results/gc_content/{sample}/whokaryote_predictions_T_gc.tsv',
-        'results/gc_content/{sample}/gc_plot.pdf',
     log:
         'results/logs/gc_content/{sample}.log'
     script:
@@ -137,12 +138,7 @@ rule cleaner_fastq:
     shell:
         '''
         minimap2 -t {threads} -ax map-ont {input[0]} {input[1]} 2> {log} | \
-        samtools f
-rule bakta:
-    input:
-        'results/whokaryote/{sample}/prokaryotes.fasta'
-    output:
-        'results/bakta/{saastq -n -f 4 - | gzip > {output} 2>> {log}
+        samtools fastq -n -f 4 - | gzip > {output} 2>> {log}
         '''
 
 rule nextdenvovo:
@@ -156,7 +152,7 @@ rule nextdenvovo:
     params:
         out_dir='results/nextdenovo/{sample}',
     threads:
-        workflow.cores
+        nextdenovo_threads
     conda:
         'envs/nextdenovo.yaml'
     shell:
@@ -195,7 +191,6 @@ rule nextdenovo_whokaryote:
         'results/nextdenovo/{sample}/03.ctg_graph/nd.asm.fasta'
     output:
         'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
-        'results/nextdenovo_whokaryote/{sample}/prokaryotes.fasta',
         'results/nextdenovo_whokaryote/{sample}/whokaryote_predictions_T.tsv',
     log:
         'results/logs/nextdenovo_whokaryote/{sample}.log'
@@ -226,16 +221,16 @@ rule ragtag_scaffold:
         '''
         ragtag.py scaffold \
             -o {params.out_dir} \
-            {input[1]} {input[0]} &> {log}
+            {input[0]} {input[1]} &> {log}
         '''
 
 rule quickmerge:
     input:
         'results/nextdenovo_whokaryote/{sample}/eukaryotes.fasta',
         'results/ragtag/{sample}/ragtag.scaffold.fasta',
-        'results/whokaryote/{sample}/N50.txt'
+        'results/bandage/{sample}/N50.txt'
     output:
-        'results/quickmerge/{sample}/merged_metaflye_nextdenovo.fasta'
+        'results/quickmerge/{sample}/merged_metaflye_nextdenovo.fasta',
     log:
         'results/logs/quickmerge/{sample}.log'
     params:
@@ -245,44 +240,20 @@ rule quickmerge:
     conda:
         'envs/quickmerge.yaml'
     shell:
-        '''
-        N50=$(head input[2])
+        """
+        N50=$(cat {input[2]})
         merge_wrapper.py \
-            {input[1]} {input[0]} \
-            -l $N50 \
+            {input[1]} {input[0]} -l $N50 \
             -pre metaflye_nextdenovo &> {log}
-        mv merged_metaflye_nextdenovo.fasta {params.out_dir}
-        '''
+            python workflow/scripts/change_fasta_name.py merged_metaflye_nextdenovo.fasta {params.out_dir}/merged_metaflye_nextdenovo.fasta &> {log}
+        """
 
-rule racon:
+rule medaka:
     input:
         'results/quickmerge/{sample}/merged_metaflye_nextdenovo.fasta',
         'results/cleaner_fastq/{sample}.fastq.gz'
     output:
-        'results/racon/{sample}/racon_corrected.fasta'
-    log:
-        'results/logs/racon/{sample}.log'
-    params:
-        out_dir='results/racon/{sample}'
-    threads:
-        workflow.cores
-    conda:
-        'envs/racon.yaml'
-    shell:
-        '''
-        racon \
-            -t {threads} \
-            {input[1]} \
-            {input[0]} \
-            {input[1]} > {output} 2> {log}
-        '''
-
-rule medaka:
-    input:
-        'results/racon/{sample}/racon_corrected.fasta',
-        'results/cleaner_fastq/{sample}.fastq.gz'
-    output:
-        'results/medaka/{sample}/medaka_consensus.fasta'
+        'results/medaka/{sample}/consensus.fastq'
     log:
         'results/logs/medaka/{sample}.log'
     params:
@@ -293,16 +264,62 @@ rule medaka:
         'envs/medaka.yaml'
     shell:
         '''
-        medaka consensus \
-            -i {input[1]} \
+        mini_align -r {input[0]} -i {input[1]} -t {threads} -p {params.out_dir}/mini_align &> {log}
+        medaka_consensus \
+            -i {params.out_dir}/mini_align.bam \
             -d {input[0]} \
             -o {params.out_dir} \
-            -t {threads} &> {log}
+            -q \
+            -t {threads} &>> {log}
         '''
+
+rule medaka_chopper:
+    input:
+        'results/medaka/{sample}/consensus.fastq'
+    output:
+        'results/medaka/{sample}/consensus.fasta',
+        'results/medaka/{sample}/consensus_q10.fastq'
+    log:
+        'results/logs/chopper/{sample}_q10fasta.log'
+    params:
+        quality = 10
+    threads:
+        workflow.cores
+    conda:
+        'envs/chopper.yaml'
+    shell:
+        """
+        chopper -q {params.quality} -i {input} > {output[1]} 2>> {log}
+        sed -n '1~4s/^@/>/p;2~4p' {output[1]} > {output[0]} 2>> {log}
+        """
+
+rule nanoplot:
+    input:
+        'results/medaka/{sample}/consensus_q10.fastq',
+        'results/clean_fastq/{sample}.fastq.gz',
+        'results/cleaner_fastq/{sample}.fastq.gz'
+    output:
+        'results/nanoplot/{sample}/final_NanoPlot-report.html',
+        'results/nanoplot/{sample}/cleaned_NanoPlot-report.html',
+        'results/nanoplot/{sample}/eukaryotic_NanoPlot-report.html'
+    log:
+        'results/logs/nanoplot/{sample}.log'
+    params:
+        out_dir='results/nanoplot/{sample}'
+    threads:
+        workflow.cores
+    conda:
+        'envs/nanoplot.yaml'
+    shell:
+        """
+        NanoPlot -t {threads} -o {params.out_dir} --only-report -p final_ --fastq {input[0]} 2>> {log}
+        NanoPlot -t {threads} -o {params.out_dir} --only-report -p cleaned_ --fastq {input[1]} 2>> {log}
+        NanoPlot -t {threads} -o {params.out_dir} --only-report -p eukaryotic_ --fastq {input[2]} 2>> {log}
+        """
 
 rule repeatmodeler:
     input:
-        'results/medaka/{sample}/medaka_consensus.fasta'
+        'results/medaka/{sample}/consensus.fasta'
     output:
         'results/repeatmodeler/{sample}/{sample}-families.fa'
     log:
@@ -318,14 +335,15 @@ rule repeatmodeler:
         '''
         BuildDatabase -name {params.db_name} {input} &> {log}
         RepeatModeler -database {params.db_name} -threads {threads} -LTRStruct &>> {log}
+        mv RM_* results/logs/repeatmodeler/
         '''
 
 rule repeatmasker:
     input:
-        genome= 'results/medaka/{sample}/medaka_consensus.fasta',
+        genome= 'results/medaka/{sample}/consensus.fasta',
         library='results/repeatmodeler/{sample}/{sample}-families.fa'
     output:
-        'results/repeatmasker/{sample}/medaka_consensus.fasta.masked'
+        'results/repeatmasker/{sample}/consensus.fasta.masked'
     log:
         'results/logs/repeatmasker/{sample}.log'
     params:
@@ -341,7 +359,7 @@ rule repeatmasker:
 
 rule braker:
     input:
-        'results/repeatmasker/{sample}/medaka_consensus.fasta.masked',
+        'results/repeatmasker/{sample}/consensus.fasta.masked',
     output:
         'results/braker/{sample}/braker.aa',
         'results/braker/{sample}/braker.gtf'
@@ -358,7 +376,7 @@ rule braker:
         '''
         braker.pl \
             --genome {input} \
-            --esmode \
+            --prot_seq resources/Euk_Rhiz_ODB11.fasta \
             --threads {threads} \
             --AUGUSTUS_CONFIG_PATH {params.config_dir} \
             --workingdir {params.out_dir} &> {log}
@@ -416,9 +434,37 @@ rule eggnog:
             --cpu {threads} \
             --data_dir {params.db_dir} \
             --tax_scope 2759 \
-            --dassemblyecorate_gff {input[1]} &> {log}
+            --decorate_gff {input[1]} &> {log}
         '''
 
+rule bandage:
+    input:
+        'results/metaflye/{sample}/assembly_graph.gfa',
+        'results/whokaryote/{sample}/whokaryote_predictions_T.tsv',
+        'results/whokaryote/{sample}/eukaryotes.fasta'
+    output:
+        'results/bandage/{sample}/meta_whok.png',
+        'results/bandage/{sample}/whokaryote_predictions_T.csv',
+        'results/bandage/{sample}/N50.txt'
+    log:
+        'results/logs/bandage/{sample}.log'
+    params:
+        out_dir='results/bandage/{sample}',
+    threads:
+        workflow.cores
+    conda:
+        'envs/bandage.yaml'
+    shell:
+        '''
+        Bandage info {input[2]} --tsv |cut -f 13 > {params.out_dir}/N50.txt
+        cp {input[1]} {params.out_dir}/whokaryote_predictions_T.csv
+        sed -i -e 's/contig/edge/g' {params.out_dir}/whokaryote_predictions_T.csv
+        sed -i -e 's/predicted/Colour/g' {params.out_dir}/whokaryote_predictions_T.csv
+        sed -i -e 's/eukaryote/red/g' {params.out_dir}/whokaryote_predictions_T.csv
+        sed -i -e 's/prokaryote/green/g' {params.out_dir}/whokaryote_predictions_T.csv
+        sed -i 's/\t/,/g' {params.out_dir}/whokaryote_predictions_T.csv
+        Bandage image {input[0]} {params.out_dir}/meta_whok.png --colors {params.out_dir}/whokaryote_predictions_T.csv
+        '''
 
 rule cp_final_output:
     input:
@@ -427,16 +473,24 @@ rule cp_final_output:
         'results/braker/{sample}/braker.aa',
         'results/busco/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/bakta/{sample}/prokaryotes.gff3',
-        'results/gc_content/{sample}/gc_plot.pdf',
-        'results/eggnog/{sample}/eukaryotes.emapper.annotations'
+
+        'results/eggnog/{sample}/eukaryotes.emapper.annotations',
+        'results/bandage/{sample}/meta_whok.png',
+        'results/nanoplot/{sample}/final_NanoPlot-report.html',
+        'results/nanoplot/{sample}/cleaned_NanoPlot-report.html',
+        'results/nanoplot/{sample}/eukaryotic_NanoPlot-report.html'
     output:
         'results/final/{sample}/assembly_graph.gfa',
         'results/final/{sample}/eukaryotes.fasta',
         'results/final/{sample}/braker.aa',
         'results/final/{sample}/short_summary.specific.eukaryota_odb10.{sample}.txt',
         'results/final/{sample}/prokaryotes.gff3',
-        'results/final/{sample}/gc_plot.pdf',
-        'results/final/{sample}/eukaryotes.emapper.annotations'
+
+        'results/final/{sample}/eukaryotes.emapper.annotations',
+        'results/final/{sample}/meta_whok.png'
+        'results/final/{sample}/final_NanoPlot-report.html',
+        'results/final/{sample}/cleaned_NanoPlot-report.html',
+        'results/final/{sample}/eukaryotic_NanoPlot-report.html'
     log:
         'results/logs/final/{sample}.log'
     threads:
@@ -450,4 +504,8 @@ rule cp_final_output:
         cp {input[4]} {output[4]} &>> {log}
         cp {input[5]} {output[5]} &>> {log}
         cp {input[6]} {output[6]} &>> {log}
+        cp {input[7]} {output[7]} &>> {log}
+        cp {input[8]} {output[8]} &>> {log}
+        cp {input[9]} {output[9]} &>> {log}
+
         '''
